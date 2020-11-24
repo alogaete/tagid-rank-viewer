@@ -1,0 +1,173 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml">
+	<head>
+		<meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+		<title>TAGID</title>
+		<link href="./files/jquery-ui-1.10.4.custom.css" rel="stylesheet" type="text/css">
+		<link href="./files/style.css" rel="stylesheet" type="text/css">
+		<script src="./files/jquery-1.10.2.js" type="text/javascript" language="javascript"></script>
+		<script src="./files/jquery-ui.js" type="text/javascript" language="javascript"></script>
+		<script>
+			var QueryString = function () {
+			  // This function is anonymous, is executed immediately and 
+			  // the return value is assigned to QueryString!
+			  var query_string = {};
+			  var query = window.location.search.substring(1);
+			  var vars = query.split("&");
+			  for (var i=0;i<vars.length;i++) {
+			    var pair = vars[i].split("=");
+			    	// If first entry with this name
+			    if (typeof query_string[pair[0]] === "undefined") {
+			      query_string[pair[0]] = pair[1];
+			    	// If second entry with this name
+			    } else if (typeof query_string[pair[0]] === "string") {
+			      var arr = [ query_string[pair[0]], pair[1] ];
+			      query_string[pair[0]] = arr;
+			    	// If third or later entry with this name
+			    } else {
+			      query_string[pair[0]].push(pair[1]);
+			    }
+			  } 
+			    return query_string;
+			} ();
+			
+			$(document).ready(function () {
+				var contfilas = 0;
+				var contfilastotal= 10000;
+				var ids= "";
+			
+				var displayLength = 5;
+				if(QueryString.displayLength){
+					displayLength = QueryString.displayLength;
+				}
+				
+				$(document).on( 'click', '.toggle-print', function(){$('.controles').toggle();});
+			
+				var getControl = function (raceID, bracketId, runnerId){
+					$.ajax({
+						url: 'http://results.chronotrack.com/embed/results/load-model?modelID=athlete&eventID='+ QueryString.eventID +'&entryID='+runnerId,
+						data: '',
+						type: 'GET',
+						crossDomain: true,
+						dataType: 'jsonp',
+						success: function(json){
+							//console.log(json);
+							var tr = $('<tr></tr>');
+							var table = $('<table></table>').addClass('controles').html(tr);
+							var meta_controles = '';
+							var time_str_old = '0';
+							var no_control = 0;
+							for (var i = 0; i < json.model.intervals.length; i++) {
+								meta_controles +='<td><input type="checkbox" class="cb-'+json.model.intervals[i].id+'" checked="checked">'+json.model.intervals[i].name+'</td>';
+								if(json.model.intervals[i].xcrossing_time != null){
+									var time_str = json.model.intervals[i].xcrossing_time.slice(0,json.model.intervals[i].xcrossing_time.lastIndexOf(":")+3);
+									time_str = (time_str.charAt(1)==':'?'0'+time_str:time_str);
+									if(json.model.intervals[i].xcrossing_time.lastIndexOf("p.m.")>0 && time_str.slice(0,2) != "12"){
+										time_str = "" + (parseInt(time_str.slice(0,2))+12) + time_str.slice(2);
+									}
+									//if(i==3){time_str ='04:00:05';}
+									var intensify = (time_str<time_str_old?'style="color:red; font-weight:bold;"':'');
+									time_str_old = time_str;
+									tr.append('<td '+intensify+'>'+ time_str +'</td>');
+								}else{
+									no_control++;
+									tr.append('<td style="color:red; font-weight:bold;">NO</td>');
+								}
+							}
+							if(no_control < QueryString.noControl){
+								$('.fila'+runnerId).hide();
+							}else{ ids=ids+","+runnerId;
+			 				}
+							$('.meta-controles'+bracketId).html(meta_controles);
+							$('.controles'+json.model.entry.bib).html(table);
+							contfilas++;
+							if(contfilas == contfilastotal){
+								if('1' == QueryString.remove){
+									$.ajax({ 
+										url: 'remove.php?eventID='+ QueryString.eventID,
+										data: { entryID: ids.substring(1) },
+										type: 'POST', success: function(d){alert("TERMINADO!  ");}}); 
+									console.log('remove.php?eventID='+ QueryString.eventID +'  entryID='+ ids.substring(1));}
+							
+							}
+						},
+						error: function() {
+							getControl(raceID, bracketId, runnerId); 
+						}
+					});
+				}
+				
+			  	var getBracket = function (raceID, bracketId){
+					$.ajax({
+						url: 'http://results.chronotrack.com/embed/results/results-grid?iDisplayLength='+displayLength+'&eventID='+ QueryString.eventID +'&raceID='+raceID+'&bracketID='+ bracketId,
+						data: '',
+						type: 'GET',
+						crossDomain: true,
+						dataType: 'jsonp',
+						success: function(json){
+							//console.log(json);
+							var row = $('<tr></tr>').html('<th>N</th><th>BIB</th><th>Nombre</th><th>Tiempo</th><th>Ritmo</th><th style="padding:0;"><table class="controles"><tr class="meta-controles'+bracketId+'"></tr></table></th>')
+							$('.table'+bracketId).append(row);
+							contfilastotal = json.aaData.length;
+							for (var i = 0; i < json.aaData.length; i++) {
+								var url = "https://admin.chronotrack.com/admin/entry/race?entryID="+json.aaData[i][0];
+								var textcolor =  (i%2)?' class="par fila'+json.aaData[i][0]+'" ':' class="nopar fila'+json.aaData[i][0]+'" ';
+								var row = $('<tr '+ textcolor +" ></tr>").html('<td>'+(i+1)+'</td>'+'<td><a href="'+url+'" target="_blank">'+json.aaData[i][3]+'</a><td>'+json.aaData[i][2]+'</td><td>'+json.aaData[i][4]+'</td><td>'+json.aaData[i][5]+'</td><td class="controles'+json.aaData[i][3]+'"></td>')
+								$('.table'+bracketId).append(row);
+								getControl(raceID, bracketId,json.aaData[i][0]);
+							}
+						},
+						error: function() { alert('Failed!'); }
+					});
+				}
+			  
+				$.ajax({
+					url: 'http://results.chronotrack.com/embed/results/load-model?modelID=event&eventID='+ QueryString.eventID,
+					data: '',
+					type: 'GET',
+					crossDomain: true,
+					dataType: 'jsonp',
+					success: function(json) { 
+						$(".event-name").html(json.model.name);
+						var tr;
+						 $.each(json.model.races, function(ind, item) {
+							//console.log(item);
+							if (QueryString.race != item.name) return;
+							var race = $('<div></div>').addClass('accordion');
+							var row = $('<h1></h1>').addClass('bar').addClass('toggle-print').text('Distancia ' + item.name);
+							$('#p-content').append(row);
+							$('#p-content').append(race);
+							for (var i = 0; i < item.brackets.length; i++) {
+			
+								if(item.brackets[i].name !=  'Overall') continue;
+								var row = $('<h3></h3>').addClass('bar').text('Categoria ' + item.brackets[i].name);
+								race.append(row);
+								var table = $('<table></table>').addClass('table'+item.brackets[i].id);
+								var div = $('<div></div>').append($('<p></p>').append(table));
+								race.append(div);
+								getBracket(item.id, item.brackets[i].id);
+							}
+							//$( ".accordion" ).accordion({
+							//	heightStyle: "content"
+							//});
+							$( ".ui-accordion-content").css("padding",0);
+						});
+					},
+					error: function() { alert('Failed!'); }
+				});
+			});
+		</script>
+	</head>
+	<body>
+		<h2 class="head event-name"></h2>
+		<div class="content">
+			<p id="p-content"></p>
+		</div>
+		<div class="footer">
+			<p>
+				<a href="http://WWW.TAGID.CL/">WWW.TAGID.CL</a>
+			</p>
+		</div>
+	</body>
+
+</html>

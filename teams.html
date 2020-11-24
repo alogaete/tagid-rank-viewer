@@ -1,0 +1,177 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml">
+	<head>
+		<meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+		<title>TAGID</title>
+		<link href="./files/jquery-ui-1.10.4.custom.css" rel="stylesheet" type="text/css">
+		<link href="./files/style.css" rel="stylesheet" type="text/css">
+		<script src="./files/jquery-1.10.2.js" type="text/javascript" language="javascript"></script>
+		<script src="./files/jquery-ui.js" type="text/javascript" language="javascript"></script>
+		<script>
+			var QueryString = function () {
+			  // This function is anonymous, is executed immediately and 
+			  // the return value is assigned to QueryString!
+			  var query_string = {};
+			  var query = window.location.search.substring(1);
+			  var vars = query.split("&");
+			  for (var i=0;i<vars.length;i++) {
+			    var pair = vars[i].split("=");
+			    	// If first entry with this name
+			    if (typeof query_string[pair[0]] === "undefined") {
+			      query_string[pair[0]] = pair[1];
+			    	// If second entry with this name
+			    } else if (typeof query_string[pair[0]] === "string") {
+			      var arr = [ query_string[pair[0]], pair[1] ];
+			      query_string[pair[0]] = arr;
+			    	// If third or later entry with this name
+			    } else {
+			      query_string[pair[0]].push(pair[1]);
+			    }
+			  } 
+			    return query_string;
+			} ();
+			
+			$(document).ready(function () {
+			
+				var displayLength = 5;
+				if(QueryString.displayLength){
+					displayLength = QueryString.displayLength;
+				}
+				
+				var teamSize = 2;
+				if(QueryString.teamSize){
+					teamSize = QueryString.teamSize;
+				}
+			
+				$(document).on( 'click', '.toggle', function(){
+					$(this).parent().next().toggle();
+					$(this).parent().toggle();
+				});
+
+				$( ".ui-accordion-content").css("padding",0);
+								
+			  	var getBracket = function (raceID, bracketId){
+					$.ajax({
+						url: 'https://results.chronotrack.com/embed/results/results-grid?iDisplayLength=700000&eventID='+ QueryString.eventID +'&raceID='+raceID+'&bracketID='+ bracketId,
+						data: '',
+						type: 'GET',
+						crossDomain: true,
+						dataType: 'jsonp',
+						success: function(json){
+							var row = $('<tr></tr>').html('<th>N</th><th>Bib</th><th>Nombre</th><th>Tiempo Individual</th><th>Tiempo Equipo</th>');
+							$('.table'+bracketId).append(row);
+							
+							let temp =  {};
+							let j = 0;
+							for (var i = 0; i < json.aaData.length; i++) {
+								var bib = ""+json.aaData[i][3]
+								var num_bib = ""+json.aaData[i][3].substr(0, bib.length - 1);
+								var letter_bib = bib.substr(bib.length - 1);
+								if(!(num_bib in temp)){
+									temp[num_bib] = [];
+								}
+								temp[num_bib].push({"time":json.aaData[i][4],"bib":bib, "name":json.aaData[i][2]});
+
+								if(temp[num_bib].length == teamSize){
+									let bibs = "";
+									let names = "";
+									let times = "";
+									let time = temp[num_bib][temp[num_bib].length -1].time;
+									for (var k = 0; k < temp[num_bib].length; k++) {
+										bibs += temp[num_bib][k].bib + "<br/>";
+										names += temp[num_bib][k].name + "<br/>";
+										times += temp[num_bib][k].time + "<br/>";
+									}
+									
+									j++;
+									var textcolor =  (j%2)?' class="par" ':' class="nopar" ';
+									var row = $('<tr '+ textcolor +" ></tr>").html(
+										'<td>'+j+'</td>'+
+										'<td>' + bibs + '</td>'+
+										'<td>' + names + '</td>'+
+										'<td>' + times + '</td>'+
+										'<td>' + time + '</td>');
+									$('.table'+bracketId).append(row);
+									
+									if(displayLength == j) return;
+								}
+							}
+							return;
+						},
+						error: function() { alert('Failed!'); }
+					});
+				}
+				
+				
+				$(".app-active").hide();
+				$(".app-inactive").show();
+				if(QueryString.eventID){
+					$.ajax({
+						url: 'https://results.chronotrack.com/embed/results/load-model?modelID=event&eventID='+ QueryString.eventID,
+						data: '',
+						type: 'GET',
+						crossDomain: true,
+						dataType: 'jsonp',
+						success: function(json) {
+							$(".app-inactive").hide();
+							$(".app-active").show();
+							$(".event-name").html(json.model.name);
+							var tr;
+							 $.each(json.model.races, function(ind, item) {
+								//console.log("Races"), item);
+								if (decodeURI(QueryString.race)  != item.name) return;
+								var race = $('<div></div>').addClass('accordion');
+								var row = $('<h1></h1>').addClass('bar').text('Distancia ' + item.name);
+								$('#p-content').append(row);
+								$('#p-content').append(race);
+								for (var i = 0; i < item.brackets.length; i++) {
+									console.log("bracket:", decodeURI(QueryString.bracket), item.brackets[i].name);
+									if(item.brackets[i].name != decodeURI(QueryString.bracket) && QueryString.bracket != 'all') continue;
+									var spantoggle = $('<span class="toggle" style="font-size: 24px; cursor: pointer;">■</span>');
+									var row = $('<h3></h3>').addClass('bar').append(spantoggle).append(' Categoria ' + item.brackets[i].name);
+									race.append(row);
+									var table = $('<table></table>').addClass('table'+item.brackets[i].id);
+									var div = $('<div></div>').append($('<p></p>').append(table));
+									race.append(div);
+									getBracket(item.id, item.brackets[i].id);
+								}
+								//$( ".accordion" ).accordion({
+								//	heightStyle: "content"
+								//});
+								$( ".ui-accordion-content").css("padding",0);
+							});
+						},
+						error: function() { alert('Failed!'); }
+					});
+				}
+			});
+		</script>
+	</head>
+	<body>
+		<div class="centered-wrapper app-inactive">
+			<div class="centered-content">
+				<p>tagid.agx.cl</p>
+				<p style="font-size: 18px; margin-top:-52px">
+					<a style="font-size: 50px;" href="./teams.html?displayLength=3&race=Completa40K&eventID=35056&teamSize=2&bracket=DuplasVarones">■</a>
+				</p>
+			</div>
+		</div>
+		<div class="app-active">
+			<h2 class="head" style="font-size:14px;">
+				<img src="files/logo.png" style="background:#fff;  height: 20px; margin-top: -5px; margin-bottom: -5px;">
+				<span class="toggle-print" style="font-size: 24px; cursor: pointer;">■</span>
+				Resultados 
+				<span class="event-name"></span>
+			</h2>
+			<div class="content">
+				<p id="p-content"></p>
+			</div>
+			<div class="footer">
+				<p>TAGID - CRONOMETRAJE Y GESTIÓN DE EVENTOS DEPORTIVOS
+					<a href="http://WWW.TAGID.CL/">WWW.TAGID.CL</a>
+				</p>
+			</div>
+		</div>
+	</body>
+
+</html>

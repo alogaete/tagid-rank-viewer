@@ -1,0 +1,264 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml">
+	<head>
+		<meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+		<title>TAGID</title>
+		<link href="./files/jquery-ui-1.10.4.custom.css" rel="stylesheet" type="text/css">
+		<link href="./files/style.css" rel="stylesheet" type="text/css">
+		<script src="./files/jquery-1.10.2.js" type="text/javascript" language="javascript"></script>
+		<script src="./files/jquery-ui.js" type="text/javascript" language="javascript"></script>
+		<script>
+			var QueryString = function () {
+			  // This function is anonymous, is executed immediately and
+			  // the return value is assigned to QueryString!
+			  var query_string = {};
+			  var query = window.location.search.substring(1);
+			  var vars = query.split("&");
+			  for (var i=0;i<vars.length;i++) {
+			    var pair = vars[i].split("=");
+			    	// If first entry with this name
+			    if (typeof query_string[pair[0]] === "undefined") {
+			      query_string[pair[0]] = pair[1];
+			    	// If second entry with this name
+			    } else if (typeof query_string[pair[0]] === "string") {
+			      var arr = [ query_string[pair[0]], pair[1] ];
+			      query_string[pair[0]] = arr;
+			    	// If third or later entry with this name
+			    } else {
+			      query_string[pair[0]].push(pair[1]);
+			    }
+			  }
+			    return query_string;
+			} ();
+
+			$(document).ready(function () {
+
+				var allcontent = [];
+
+				var displayLength = 5000;
+				if(QueryString.displayLength){
+					displayLength = QueryString.displayLength;
+				}
+
+				var selectedBracket = "Overall";
+
+				var selectedRace = "";
+				if(QueryString.race){
+					selectedRace = decodeURI(QueryString.race);
+				}
+
+				$(document).on( 'click', '.btn', function(){
+						let r = $('<p></p>');
+
+						allcontent.sort((a, b) => (parseInt(a.bib) > parseInt(b.bib)) ? 1 : -1)
+						for (var i = 0; i < allcontent.length; i++) {
+							r.append(allcontent[i].content);
+						}
+						$('#p-content').html(r);
+				});
+
+				$( ".ui-accordion-content").css("padding",0);
+
+				var subtractTimes = function (hora1, hora2){
+						//console.log("hora1:"+hora1 + " hora2:"+hora2);
+				    if(hora1 == "" || hora2 == "") return "";
+				    let [h1, m1, s1] =  hora1.split(':');
+				    let [h2, m2, s2] = hora2.split(':');
+				    let [se1, sf1] = s1.split('.');
+				    let [se2, sf2] = s2.split('.');
+
+						[h1, m1, se1, sf1] = [parseInt(h1), parseInt(m1), parseInt(se1), parseInt(sf1)];
+						[h2, m2, se2, sf2] = [parseInt(h2), parseInt(m2), parseInt(se2), parseInt(sf2)];
+
+						if(h1>0&&h1<7) h1 = h1 + 12;
+						if(h2>0&&h2<7) h2 = h2 + 12;
+
+						//console.log(formatT(h1, m1, se1, sf1));
+
+				    //resto los milisegundos
+				    let sft=sf2-sf1;
+				    if(sft<0){
+				        sft=1000+sft;
+				        se2=se2-1;
+				    }
+				    //resto los segundos
+				    let set=se2-se1;
+				    if(set<0){
+				        set=60+set;
+				        m2=m2-1;
+				    }
+				    //resto los minutos
+				    let mt=m2-m1;
+				    if(mt<0){
+				        mt=60+mt;
+				        h2=h2-1;
+				    }
+				    //resto las horas
+				    ht=h2-h1;
+				    return formatT(ht, mt, set, sft);
+				}
+
+				var formatT = function (ht, mt, set, sft){
+					return (ht>9?ht:"0"+ht)  + ":" +  (mt>9?mt:"0"+mt)  + ":" +  (set>9?set:"0"+set)  + "." + (sft>9?(sft>99?sft:"0"+sft):"00"+sft);
+				}
+
+				window.subtractTimes = subtractTimes;
+
+				var intervalNameTranslator = function (name){
+					switch (name) {
+					  case "Inicio":
+							return "swimStart";
+				 		case "Swim":
+							return "swimEnd";
+						case "Start to T1 Out":
+							return "bikeStart";
+						case "CB1":
+							return "bikeTurn1";
+						case "CB2":
+							return "bikeTurn2";
+						case "CB3":
+							return "bikeTurn3";
+						case "CB4":
+							return "bikeTurn4";
+						case "CB5":
+							return "bikeTurn5";
+						case "CB6":
+							return "bikeTurn6";
+						case "Bike":
+							return "bikeEnd";
+						case "Start to T2 Out":
+							return "runStart";
+						case "CR1":
+							return "runTurn1";
+						case "CR2":
+							return "runTurn2";
+						case "CR3":
+							return "runTurn3";
+						case "CR4":
+							return "runTurn4";
+						case "CR5":
+							return "runTurn5";
+						case "CR6":
+							return "runTurn6";
+						case "CR7":
+							return "runTurn7";
+						case "CR8":
+							return "runTurn8";
+						case "Run":
+							return "runEnd";
+					}
+					return name;
+				}
+
+				var getControl = function (raceID, bracketId, runnerId){
+					$.ajax({
+						url: 'https://results.chronotrack.com/embed/results/load-model?modelID=athlete&eventID='+ QueryString.eventID +'&entryID='+runnerId,
+						data: '',
+						type: 'GET',
+						crossDomain: true,
+						dataType: 'jsonp',
+						success: function(json){
+							var time_str_old = '0';
+							let content = "";
+							let swimStart = "";
+							for (var i = 0; i < json.model.intervals.length; i++) {
+
+								if(json.model.intervals[i].name == "T1"
+									|| json.model.intervals[i].name == "T2"
+									|| json.model.intervals[i].name == "Start to T1 In"
+									|| json.model.intervals[i].name == "Start to T2 In"
+									|| json.model.intervals[i].name == "Total") continue;
+
+								if(json.model.intervals[i].xcrossing_time != null){
+									var time_str = json.model.intervals[i].xcrossing_time.slice(0,json.model.intervals[i].xcrossing_time.lastIndexOf(":")+3);
+									time_str = (time_str.charAt(1)==':'?'0'+time_str:time_str);
+									if(json.model.intervals[i].xcrossing_time.lastIndexOf("p.m.")>0 && time_str.slice(0,2) != "12"){
+										time_str = "" + (parseInt(time_str.slice(0,2))+12) + time_str.slice(2);
+									}
+									time_str = time_str + ".000";
+									if(json.model.intervals[i].name == "Inicio"){
+										swimStart = time_str;
+									}else{
+										time_str = subtractTimes(swimStart, time_str);
+									}
+									content += json.model.entry.bib + "," + time_str + "," +  intervalNameTranslator(json.model.intervals[i].name) + "<br/>";
+								}
+							}
+							allcontent.push({ bib: json.model.entry.bib, content: content });
+							$('.controles'+json.model.entry.bib).html(content);
+						},
+						error: function() {
+							getControl(raceID, bracketId, runnerId);
+						}
+					});
+				}
+
+
+			  	var getBracket = function (raceID, bracketId){
+					$.ajax({
+						url: 'https://results.chronotrack.com/embed/results/results-grid?iDisplayLength='+displayLength+'&eventID='+ QueryString.eventID +'&raceID='+raceID+'&bracketID='+ bracketId,
+						data: '',
+						type: 'GET',
+						crossDomain: true,
+						dataType: 'jsonp',
+						success: function(json){
+							//console.log('Bracket',json);
+							for (var i = 0; i < json.aaData.length; i++) {
+								var textcolor =  (i%2)?'par':'nopar';
+								var row = $('<li></li>').addClass('controles'+json.aaData[i][3]).attr("data-position", json.aaData[i][3]);
+								$('.table'+bracketId).append(row);
+								getControl(raceID, bracketId,json.aaData[i][0]);
+							}
+						},
+						error: function() { alert('Failed!'); }
+					});
+				}
+
+
+				$(".app-active").hide();
+				$(".app-inactive").show();
+				if(QueryString.eventID){
+					$.ajax({
+						url: 'https://results.chronotrack.com/embed/results/load-model?modelID=event&eventID='+ QueryString.eventID,
+						data: '',
+						type: 'GET',
+						crossDomain: true,
+						dataType: 'jsonp',
+						success: function(json) {
+							$(".app-inactive").hide();
+							$(".app-active").show();
+							$(".event-name").html(json.model.name);
+							var tr;
+							 $.each(json.model.races, function(ind, race) {
+								//console.log("Races"), item);
+								if (selectedRace != race.name) return;
+								var raceHTML = $('<div></div>').addClass('accordion');
+								var row = $('<h1></h1>').addClass('bar').addClass('btn').text('Distancia ' + race.name);
+								$('#p-content').append(row);
+								$('#p-content').append(raceHTML);
+								for (var i = 0; i < race.brackets.length; i++) {
+									if(!race.brackets[i].name.includes(selectedBracket) && QueryString.bracket != 'all') continue;
+									var row = $('<h3></h3>').addClass('bar').append(' Ordenar ' + race.brackets[i].name);
+									raceHTML.append(row);
+									var table = $('<ul></ul>').addClass('table'+race.brackets[i].id);
+									var div = $('<div></div>').append($('<p></p>').append(table));
+									raceHTML.append(div);
+									getBracket(race.id, race.brackets[i].id);
+								}
+								//$( ".accordion" ).accordion({
+								//	heightStyle: "content"
+								//});
+								$( ".ui-accordion-content").css("padding",0);
+							});
+						},
+						error: function() { alert('Failed!'); }
+					});
+				}
+			});
+		</script>
+	</head>
+	<body>
+		<p id="p-content"></p>
+	</body>
+
+</html>

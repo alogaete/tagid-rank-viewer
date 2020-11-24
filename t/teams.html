@@ -1,0 +1,184 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml">
+	<head>
+		<meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+		<title>TAGID</title>
+		<link href="./files/jquery-ui-1.10.4.custom.css" rel="stylesheet" type="text/css">
+		<link href="./files/style.css" rel="stylesheet" type="text/css">
+		<script src="./files/jquery-1.10.2.js" type="text/javascript" language="javascript"></script>
+		<script src="./files/jquery-ui.js" type="text/javascript" language="javascript"></script>
+		<script>
+			var QueryString = function () {
+			  // This function is anonymous, is executed immediately and 
+			  // the return value is assigned to QueryString!
+			  var query_string = {};
+			  var query = window.location.search.substring(1);
+			  var vars = query.split("&");
+			  for (var i=0;i<vars.length;i++) {
+			    var pair = vars[i].split("=");
+			    	// If first entry with this name
+			    if (typeof query_string[pair[0]] === "undefined") {
+			      query_string[pair[0]] = pair[1];
+			    	// If second entry with this name
+			    } else if (typeof query_string[pair[0]] === "string") {
+			      var arr = [ query_string[pair[0]], pair[1] ];
+			      query_string[pair[0]] = arr;
+			    	// If third or later entry with this name
+			    } else {
+			      query_string[pair[0]].push(pair[1]);
+			    }
+			  } 
+			    return query_string;
+			} ();
+			var ct = "";
+			var start = 0;
+			$(document).ready(function () {
+			
+				var displayLength = 70000;
+				
+				$(document).on( 'click', '.toggle-print', function(){
+				  var element = document.createElement('a');
+				  element.setAttribute('href', 'data:text/plain;charset=utf-8,' + encodeURIComponent(ct));
+				  element.setAttribute('download','ctlive.csv');
+				  element.style.display = 'none';
+				  document.body.appendChild(element);
+				  element.click();
+				  document.body.removeChild(element);
+				});
+			
+				$(document).on( 'click', '.toggle', function(){
+					$(this).next().toggle();
+					$(this).toggle();
+				});
+
+			  	var getBracket = function (raceID, bracketId){
+					$.ajax({
+						url: 'http://results.chronotrack.com/embed/results/results-grid?iDisplayLength='+displayLength+'&eventID='+ QueryString.eventID +'&raceID='+raceID+'&bracketID='+ bracketId,
+						data: '',
+						type: 'GET',
+						crossDomain: true,
+						dataType: 'jsonp',
+						success: function(json){
+							console.log(json);
+									
+							$.getJSON( "http://live.tagid.cl/cla/json2.php", function( jsonteam ) {
+								jsonteam=jsonteam.data;
+									
+								var times = [];
+								var res =  [];
+								var a =  0;
+								var row = $('<tr></tr>').html('<th>N</th><th>Nombres</th><th>Team</th><th>Tiempo Promedio</th>')
+								$('.table'+bracketId).append(row);
+								for (var i = 0; i < json.aaData.length; i++) {
+									var id = ""+json.aaData[i][3]
+									times[id]={"time":json.aaData[i][4],"name":id + " "+json.aaData[i][2]};
+								}
+								for (var i = 0; i < jsonteam.length; i++) {
+									var aux = jsonteam[i].bibs.split(",");
+									var sum=0;
+									var names="";
+									var finish=1;
+									for (var j = 0; j < aux.length; j++) {
+										if(times[aux[j]]==null)
+											finish=0;
+										else{
+											var p = times[aux[j]].time.split(":");
+											console.log(p);
+											sum+= (parseInt(p[0])*3600+parseInt(p[1])*60+parseInt(p[2]))/aux.length;
+											names+= " "+times[aux[j]].name+"<br>";
+										}
+									}
+									if(finish){
+										res[a++]={
+											"time": (Math.floor(sum/3600)>9?"":"0")+Math.floor(sum/3600)+":"+(Math.floor((sum/60)%60)>9?"":"0")+Math.floor((sum/60)%60)+":"+(Math.floor(sum%60)>9?"":"0")+Math.floor((sum%60)*100)/100,
+											"t":sum,
+											"name":"Familia Num. "+jsonteam[i].bib,
+											"bibs":jsonteam[i].bibs,
+											"bib":jsonteam[i].bib,
+											"names":names.substring(0,names.length-4)
+										};
+									}
+								}
+								res.sort(function(a, b){return a.t-b.t;}); 
+								for (var i = 0; i < res.length; i++) {
+									var textcolor =  (i%2)?' class="par" ':' class="nopar" ';
+									var row = $('<tr '+ textcolor +" ></tr>").html('<td>'+(i+1)+'</td>'+'<td>'+res[i].names+'<td>'+res[i].name+'</td><td>'+res[i].time+'</td>');
+									$('.table'+bracketId).append(row);
+									if(i+1 == QueryString.displayLength){break;}
+								}
+								
+								for (var i = 0; i < res.length; i++) {
+									var textcolor =  (i%2)?' class="par" ':' class="nopar" ';
+									var row = $('<tr '+ textcolor +" ></tr>").html('<td>'+(i+1)+'</td>'+'<td>'+res[i].names+'<td>'+res[i].name+'</td><td>'+res[i].time+'</td>');
+									ct+="TO~4~"+res[i].bib+"~181~48~"+start+".00~10D501~1~-48~5091~P~25\n";
+									ct+="TO~4~"+res[i].bib+"~181~48~"+(start+Math.floor(res[i].t))+".00~10D501~1~-48~5091~P~25\n";
+								}
+							});
+						},
+						error: function() { alert('Failed3!'); }
+					});
+					
+				}
+
+				
+
+				$.ajax({
+							url: 'http://results.chronotrack.com/embed/results/load-model?modelID=event&eventID='+ QueryString.eventID,
+							data: '',
+							type: 'GET',
+							crossDomain: true,
+							dataType: 'jsonp',
+							success: function(json) { 
+								$(".event-name").html(json.model.name);
+								console.log(json.model.start_time);
+								$.getJSON( "http://live.tagid.cl/cla/time.php?time="+json.model.start_time, function( time ) {
+									start=1438519946-3*60*60;
+								});
+								$.each(json.model.races, function(ind, item) {
+									//console.log(item);
+									if (QueryString.race != item.name) return;
+									var race = $('<div></div>').addClass('accordion');
+									var row = $('<h1></h1>').addClass('bar').addClass('toggle-print').text('Distancia ' + item.name);
+									$('#p-content').append(row);
+									$('#p-content').append(race);
+									
+									for (var i = 0; i < item.brackets.length; i++) {
+					
+										if(item.brackets[i].name != QueryString.bracket && QueryString.bracket != 'all') continue;
+										var row = $('<h3></h3>').addClass('bar').addClass('toggle').text('Categoria ' + item.brackets[i].name);
+										race.append(row);
+										var table = $('<table></table>').addClass('table'+item.brackets[i].id);
+										var div = $('<div></div>').append($('<p></p>').append(table));
+										race.append(div);
+										getBracket(item.id, item.brackets[i].id);
+									}
+									//$( ".accordion" ).accordion({
+									//	heightStyle: "content"
+									//});
+									$( ".ui-accordion-content").css("padding",0);
+								});
+							},
+							error: function() { alert('Failed2!'); }
+					});
+
+			});
+		</script>
+	</head>
+	<body>
+		<div style="width:100%; text-align: center;">
+			<img src="http://www.tagid.cl/old/logo.png" style="background:#fff;">
+		</div>
+		<h2 class="head">Resultados
+			<span class="event-name"></span>
+		</h2>
+		<div class="content">
+			<p id="p-content"></p>
+		</div>
+		<div class="footer">
+			<p>TAGID - CRONOMETRAJE Y GESTION DE EVENTOS DEPORTIVOS
+				<a href="http://WWW.TAGID.CL/">WWW.TAGID.CL</a>
+			</p>
+		</div>
+	</body>
+
+</html>

@@ -1,0 +1,230 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml">
+	<head>
+		<meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+		<title>TAGID</title>
+		<link href="./files/jquery-ui-1.10.4.custom.css" rel="stylesheet" type="text/css">
+		<link href="./files/style.css" rel="stylesheet" type="text/css">
+		<script src="./files/jquery-1.10.2.js" type="text/javascript" language="javascript"></script>
+		<script src="./files/jquery-ui.js" type="text/javascript" language="javascript"></script>
+		<script>
+			var QueryString = function () {
+			  // This function is anonymous, is executed immediately and
+			  // the return value is assigned to QueryString!
+			  var query_string = {};
+			  var query = window.location.search.substring(1);
+			  var vars = query.split("&");
+			  for (var i=0;i<vars.length;i++) {
+			    var pair = vars[i].split("=");
+			    	// If first entry with this name
+			    if (typeof query_string[pair[0]] === "undefined") {
+			      query_string[pair[0]] = pair[1];
+			    	// If second entry with this name
+			    } else if (typeof query_string[pair[0]] === "string") {
+			      var arr = [ query_string[pair[0]], pair[1] ];
+			      query_string[pair[0]] = arr;
+			    	// If third or later entry with this name
+			    } else {
+			      query_string[pair[0]].push(pair[1]);
+			    }
+			  }
+			    return query_string;
+			} ();
+
+			$(document).ready(function () {
+
+				var displayLength = 5;
+				if(QueryString.displayLength){
+					displayLength = QueryString.displayLength;
+				}
+
+				var selectedBracket = "all";
+				if(QueryString.bracket){
+					selectedBracket = QueryString.bracket;
+				}
+
+				var selectedRace = "";
+				if(QueryString.race){
+					selectedRace = decodeURI(QueryString.race);
+				}
+
+				$(document).on( 'click', '.toggle-print', function(){$('.controles').toggle(); });
+
+				$(document).on( 'click', '.toggle', function(){
+					$(this).parent().next().toggle();
+					$(this).parent().toggle();
+				});
+
+				$(document).on( 'click', '.disqualify', function(){
+					if(!$(this).hasClass("disqualify2")){
+						$(this).addClass("disqualify2");
+						var self = this;
+						setTimeout(function() {
+							$(self).removeClass("disqualify2");
+						}, 1000);
+						return;
+					}
+					let athleteId = $(this).attr("athlete-id");
+					let url = "https://admin.chronotrack.com/admin/entry/race?entryID=" + athleteId;
+					$('#the-frame').attr('src',url);
+					$('#the-frame').load(function() {
+						alert("ready");
+						$('#the-frame').contents().find("#entry-status option[value='DQ']").attr('selected',true);
+						$('#the-frame').contents().find("#entry-status option[value='CONF']").removeAttr('selected');
+						$('#the-frame').contents().find("#submitsave").click();
+					});
+				});
+
+
+				$( ".ui-accordion-content").css("padding",0);
+
+				var getControl = function (raceID, bracketId, runnerId){
+					$.ajax({
+						url: 'https://results.chronotrack.com/embed/results/load-model?modelID=athlete&eventID='+ QueryString.eventID +'&entryID='+runnerId,
+						data: '',
+						type: 'GET',
+						crossDomain: true,
+						dataType: 'jsonp',
+						success: function(json){
+							console.log("Control", json);
+							var tr = $('<tr></tr>');
+							var table = $('<table></table>').addClass('controles').html(tr);
+							var meta_controles = '';
+							var time_str_old = '0';
+							for (var i = 0; i < json.model.intervals.length; i++) {
+								meta_controles +='<td><input type="checkbox" class="cb-'+json.model.intervals[i].id+'" checked="checked">'+json.model.intervals[i].name+'</td>';
+								if(json.model.intervals[i].xcrossing_time != null){
+									var time_str = json.model.intervals[i].xcrossing_time.slice(0,json.model.intervals[i].xcrossing_time.lastIndexOf(":")+3);
+									time_str = (time_str.charAt(1)==':'?'0'+time_str:time_str);
+									if(json.model.intervals[i].xcrossing_time.lastIndexOf("p.m.")>0 && time_str.slice(0,2) != "12"){
+										time_str = "" + (parseInt(time_str.slice(0,2))+12) + time_str.slice(2);
+									}
+									//if(i==3){time_str ='04:00:05';}
+									var intensify = (time_str<time_str_old?'style="color:red; font-weight:bold;"':'');
+									time_str_old = time_str;
+
+									var pace = "";
+									if(QueryString.pace != "0" && json.model.intervals[i].pace){
+										pace = " ("+json.model.intervals[i].pace+")";
+									}
+
+									tr.append('<td '+intensify+'>'+ time_str + pace +'</td>');
+								}else{
+									tr.append('<td style="color:red; font-weight:bold;">NO</td>');
+								}
+							}
+							$('.meta-controles'+bracketId).html(meta_controles);
+							$('.controles'+json.model.entry.bib).html(table);
+						},
+						error: function() {
+							getControl(raceID, bracketId, runnerId);
+						}
+					});
+				}
+
+
+			  	var getBracket = function (raceID, bracketId){
+					$.ajax({
+						url: 'https://results.chronotrack.com/embed/results/results-grid?iDisplayLength='+displayLength+'&eventID='+ QueryString.eventID +'&raceID='+raceID+'&bracketID='+ bracketId,
+						data: '',
+						type: 'GET',
+						crossDomain: true,
+						dataType: 'jsonp',
+						success: function(json){
+							//console.log('Bracket',json);
+							var row = $('<tr></tr>').html('<th>N</th><th>BIB</th><th>Nombre</th><th>Tiempo</th><th>Ritmo</th><th style="padding:0;"><table class="controles"><tr class="meta-controles'+bracketId+'"></tr></table></th>')
+							$('.table'+bracketId).append(row);
+							for (var i = 0; i < json.aaData.length; i++) {
+								var url = "https://admin.chronotrack.com/admin/entry/race?entryID="+json.aaData[i][0];
+								var url_timing = "https://admin.chronotrack.com/admin/entry/timing?entryID="+json.aaData[i][0];
+								var textcolor =  (i%2)?' class="par" ':' class="nopar" ';
+								var row = $('<tr '+ textcolor +" ></tr>").html(
+									'<td>'+(i+1)+'</td>'+
+									'<td><a href="'+url+'" target="_blank">'+json.aaData[i][3]+'</a><!--span class="disqualify" athlete-id="'+json.aaData[i][0]+'">X</span--></td>'+
+									'<td>'+json.aaData[i][2]+'</td>'+
+									'<td><a href="'+url_timing+'" target="_blank">'+json.aaData[i][4]+'</a></td>'+
+									'<td>'+json.aaData[i][5]+'</td>'+
+									'<td class="controles'+json.aaData[i][3]+'"></td>')
+								$('.table'+bracketId).append(row);
+								getControl(raceID, bracketId,json.aaData[i][0]);
+							}
+						},
+						error: function() { alert('Failed!'); }
+					});
+				}
+
+
+				$(".app-active").hide();
+				$(".app-inactive").show();
+				if(QueryString.eventID){
+					$.ajax({
+						url: 'https://results.chronotrack.com/embed/results/load-model?modelID=event&eventID='+ QueryString.eventID,
+						data: '',
+						type: 'GET',
+						crossDomain: true,
+						dataType: 'jsonp',
+						success: function(json) {
+							$(".app-inactive").hide();
+							$(".app-active").show();
+							$(".event-name").html(json.model.name);
+							var tr;
+							 $.each(json.model.races, function(ind, race) {
+								console.log("Race", race);
+								if (selectedRace != race.name) return;
+								var raceHTML = $('<div></div>').addClass('accordion');
+								var row = $('<h1></h1>').addClass('bar').text('Distancia ' + race.name);
+								$('#p-content').append(row);
+								$('#p-content').append(raceHTML);
+								for (var i = 0; i < race.brackets.length; i++) {
+									if(!race.brackets[i].name.includes(selectedBracket) && QueryString.bracket != 'all') continue;
+									var spantoggle = $('<span class="toggle" style="font-size: 24px; cursor: pointer;">■</span>');
+									var row = $('<h3></h3>').addClass('bar').append(spantoggle).append(' Categoria ' + race.brackets[i].name);
+									raceHTML.append(row);
+									var table = $('<table></table>').addClass('table'+race.brackets[i].id);
+									var div = $('<div></div>').append($('<p></p>').append(table));
+									raceHTML.append(div);
+									getBracket(race.id, race.brackets[i].id);
+								}
+								//$( ".accordion" ).accordion({
+								//	heightStyle: "content"
+								//});
+								$( ".ui-accordion-content").css("padding",0);
+							});
+						},
+						error: function() { alert('Failed!'); }
+					});
+				}
+			});
+		</script>
+	</head>
+	<body>
+		<div class="centered-wrapper app-inactive">
+			<div class="centered-content">
+				<p>tagid.agx.cl</p>
+				<p style="font-size: 18px; margin-top:-52px">
+					<a style="font-size: 50px;" href="./?displayLength=3&race=Completa40K&eventID=35056&pace=1&bracket=all">■</a>
+				</p>
+			</div>
+		</div>
+		<div class="app-active">
+			<h2 class="head" style="font-size:14px;">
+				<img src="files/logo.png" style="background:#fff;  height: 20px; margin-top: -5px; margin-bottom: -5px;">
+				<span class="toggle-print" style="font-size: 24px; cursor: pointer;">■</span>
+				Resultados
+				<span class="event-name"></span>
+			</h2>
+			<div class="content">
+				<p id="p-content"></p>
+			</div>
+			<div class="footer">
+				<p>TAGID - CRONOMETRAJE Y GESTIÓN DE EVENTOS DEPORTIVOS
+					<a href="http://WWW.TAGID.CL/">WWW.TAGID.CL</a>
+				</p>
+			</div>
+			<!--div class="framecontainer">
+				<iframe id="the-frame" src="/default.asp" style="height:380px;width:100%"></iframe>
+			</div-->
+		</div>
+	</body>
+
+</html>
